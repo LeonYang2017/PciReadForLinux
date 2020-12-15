@@ -101,15 +101,70 @@ void version(){
 	
 }
 
+char* getOptionRom(DWORD addr, char *OptionRom){
+
+	DWORD 	 Enablebit;
+	char 	 *have= "Have";
+	char     *none = "NONE";
+
+	outl(addr+0x30,CONFIG_ADDR);
+	Enablebit = inl(CONFIG_DATA);
+
+	Enablebit &=0x00000001;	
+	
+	if (Enablebit){
+		OptionRom = have;
+	}else{
+		OptionRom = none;
+	}
+	
+	return OptionRom;
+}
+
+
+char* getDeviceType(DWORD addr, char *devicetype){
+
+	DWORD 	headtype;
+ 	char	*pcidevice="PCI device";
+	char    *bridge="PCI-to-PCI bridge";
+	char    *card ="Card Bus bridge";
+	char    *unknow="Unknow";
+	
+	outl(addr+0x0C,CONFIG_ADDR);
+	headtype = inl(CONFIG_DATA);
+	headtype &=0x00ff0000;
+	
+	switch((headtype >> 16)&7){
+		case 0x0: 
+			devicetype = pcidevice;
+			break;
+		case 0x1:
+			devicetype = bridge;
+			break;
+
+		case 0x2:
+			devicetype = card;
+			break;	
+		
+		default:
+			devicetype = unknow;
+			break;			
+	}
+	
+	
+	return devicetype;
+}
 
 
 int main(int argc,char *argv[])
 {
 	WORD bus,dev,fun,classcode;
 	DWORD addr,data,tempaddr;
-	int ret;
-	int index=0;
-	int rev;
+	int 	ret;
+	int 	index=0;
+	int 	rev;
+	char 	*DeviceType;
+	char    *OptionRom;
 	
 	if (argc != 1){
 	
@@ -141,7 +196,7 @@ int main(int argc,char *argv[])
 			addr = PCI_BASE_ADDR|(tempbus << 16)|(tempdev << 11)|(tempfun << 8)+tempreg;
 			outl(addr,CONFIG_ADDR);
 			data = inl(CONFIG_DATA);
-			printf("PCI Device:Bus %02X Dev %02X Fun %02X register data is %lx\n",tempbus,tempdev,tempfun,data);
+			printf("PCI Device:Bus %02X Dev %02X Fun %02X register data is %08lx\n",tempbus,tempdev,tempfun,data);
 			return 0;
 		}
 		
@@ -194,12 +249,12 @@ int main(int argc,char *argv[])
 	ret = iopl(3);
 	if(ret < 0)
 	{ 
-		perror("Run with Root");
+		printf("Run with Root\n");
 		return -1;
 	}
 	
 	printf("\n");
-	printf("bus#\tdev#\tfun#\tdidvid#\t\tclasscode#\trevsion#\t");
+	printf("bus#\tdev#\tfun#\tdidvid#\t\tclasscode#\trevsion#\tdevicetype#\t\toptionrom#\t");
 	printf("\n");
 	
 	for(bus = 0; bus <= PCI_MAX_BUS; bus++)
@@ -211,7 +266,7 @@ int main(int argc,char *argv[])
 		data = inl(CONFIG_DATA);
 		if((data != 0xffffffff)&&(data != 0))
 		{
-			index++;			
+			index++;		
 			tempaddr = addr+0x08;
 			outl(tempaddr,CONFIG_ADDR);
 			classcode = inl(CONFIG_DATA);
@@ -222,7 +277,13 @@ int main(int argc,char *argv[])
 			}else{
 				classcode = classcode >> 8;
 			}
-			printf("%02X\t%02X\t%02X\t%08X\t %06X\t\t   %02X\t",bus,dev,fun,( WORD )data,classcode,rev);
+			DeviceType=getDeviceType(addr,DeviceType);
+			OptionRom=getOptionRom(addr,OptionRom);
+			if(strcmp(DeviceType,"PCI-to-PCI bridge")==0){
+				printf("%02X\t%02X\t%02X\t%08X\t %06X\t\t   %02X\t\t%s\t   %s\t",bus,dev,fun,( WORD )data,classcode,rev,DeviceType,OptionRom);
+			}else{
+				printf("%02X\t%02X\t%02X\t%08X\t %06X\t\t   %02X\t\t%s\t\t   %s\t",bus,dev,fun,( WORD )data,classcode,rev,DeviceType,OptionRom);
+			}
 			printf("\n");
 			
 		} 
@@ -231,7 +292,7 @@ int main(int argc,char *argv[])
 	
 	ret = iopl(0);
 	if(ret < 0){
-		perror("iopl set error");
+		printf("iopl set error\n");
 		return -1;
 	}
 	printf("\n");
